@@ -2,11 +2,13 @@ name: GitOps-Flow
 on:
   push:
     branches: [ main ]
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
       - name: Login to DockerHub
         uses: docker/login-action@v3
@@ -16,18 +18,29 @@ jobs:
 
       - name: Build and Push
         run: |
-          # Tagging with the unique Git Commit Hash
+          # Build using the unique commit SHA
           docker build -t ${{ secrets.DOCKER_USER }}/rps-game:${{ github.sha }} .
           docker push ${{ secrets.DOCKER_USER }}/rps-game:${{ github.sha }}
 
       - name: Update GitOps Manifest
         run: |
-          git clone https://${{ secrets.GITOPS_TOKEN }}@github.com/${{ github.repository_owner }}/rps-gitops.git
+          # 1. Clone the Ops repo (Update 'rps-gitops' if your repo name is different)
+          git clone https://${{ secrets.GITOPS_TOKEN }}@github.com/rahulhs145/rps-gitops.git
           cd rps-gitops
-          # This line finds the image field and swaps it with the new version
-          sed -i "s|image: .*|image: ${{ secrets.DOCKER_USER }}/rps-game:${{ github.sha }}|g" deployment.yaml
+          
+          # 2. Update the image line
+          # This replaces 'rahulhs145/rps-game:ANYTHING' with 'rahulhs145/rps-game:CURRENT_SHA'
+          sed -i "s|image: rahulhs145/rps-game:.*|image: rahulhs145/rps-game:${{ github.sha }}|g" deployment.yaml
+          
+          # 3. Commit and Push back to the Ops repo
           git config user.name "GitOps Bot"
           git config user.email "bot@gitops.com"
-          git add .
-          git commit -m "Deploy version ${{ github.sha }}"
-          git push
+          git add deployment.yaml
+          
+          # Only commit/push if the file actually changed
+          if ! git diff --staged --quiet; then
+            git commit -m "Automated image update to ${{ github.sha }}"
+            git push
+          else
+            echo "No changes to commit"
+          fi
