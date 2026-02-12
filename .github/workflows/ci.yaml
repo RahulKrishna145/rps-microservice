@@ -1,0 +1,24 @@
+name: Build and Update GitOps
+on:
+  push:
+    branches: [ main ]
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build & Push to DockerHub
+        run: |
+          docker build -t your-docker-id/rps-game:${{ github.sha }} .
+          docker login -u ${{ secrets.DOCKER_USER }} -p ${{ secrets.DOCKER_PASS }}
+          docker push your-docker-id/rps-game:${{ github.sha }}
+
+      - name: Update Manifest Repo
+        run: |
+          git clone https://${{ secrets.GITOPS_TOKEN }}@github.com/your-user/rps-ops.git
+          cd rps-ops
+          sed -i "s|image: .*|image: your-docker-id/rps-game:${{ github.sha }}|g" deployment.yaml
+          git config user.name "GitOps Bot"
+          git config user.email "bot@gitops.com"
+          git add . && git commit -m "Deploy version ${{ github.sha }}"
+          git push
